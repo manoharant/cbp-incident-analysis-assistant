@@ -169,10 +169,16 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
 
     image_name = os.path.basename(ctx.deps.jira_deps.images[0].path) if ctx.deps.jira_deps.images else None
 
+    sherlog_host=os.getenv("SHERLOG_HOST")
+
+    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:e7f67bce-8dab-44a2-901c-2eb65e595ea5,type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
+    issue_url = issue_url.replace(")","%29")
+
     issue_description = f"""
     
     {description}
     * conversationId: {conversation_id}
+    * Sherlog url: {issue_url}
 
     {{code}}
     {json}
@@ -193,7 +199,7 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
     # Perform the search query on the specified index
     # response = ctx.deps.client.create_issue(fields=issue_dict)
     ctx.deps.jira_deps.client = JIRA(server='https://manoharant.atlassian.net',
-                           basic_auth=("manoharant@gmail.com","ATATT3xFfGF0z2tETfqzBNomWPdxMACIXRMlkMd4RjEKUtOdeypHun-ch4m28CgucDI5LJrdX3jpJg66nRpXx10lG8PCNYgQVM4kU63po59ZoRFsfVgazqZc0C3LR1bB_jnrepQOrKHt7LmIxpu6sov6fh15D8MVQLwOG4KAecJrwS1B6jHRN_g=88BE301E"))
+                           basic_auth=("manoharant@gmail.com","ATATT3xFfGF0rAfbxoDY9QMUKuvXZLEwzSxGC3rbwTH1nsuCXDlL7tSKQ5FT2Kq59yg4Q2AWzcTFtrHHEihY0yxX7fM9IFaDbDW0_n7VqMda59kXNVE5-aiAw27C1NY3h0W6fMA-e8JenDXh85rO4CA7BoOkzKDriGPHop9feUeeoAGXmJ3Z6_A=2E0BB3E5"))
     response = ctx.deps.jira_deps.client.create_issue(fields=issue_dict)
 
     if ctx.deps.jira_deps.images:
