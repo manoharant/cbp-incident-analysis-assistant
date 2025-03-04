@@ -1,0 +1,6 @@
+.env
+.logfire/
+__pycache__
+.cache
+.idea
+.DS_Store
