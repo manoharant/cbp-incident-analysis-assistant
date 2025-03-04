@@ -226,9 +226,7 @@ async def update_jira_issue(ctx: RunContext[MainDependencies],key:str, summary: 
 
     # Perform the search query on the specified index
     # response = ctx.deps.client.create_issue(fields=issue_dict)
-    ctx.deps.client = JIRA(server='https://manoharant.atlassian.net',
-                           basic_auth=("manoharant@gmail.com","ATATT3xFfGF0z2tETfqzBNomWPdxMACIXRMlkMd4RjEKUtOdeypHun-ch4m28CgucDI5LJrdX3jpJg66nRpXx10lG8PCNYgQVM4kU63po59ZoRFsfVgazqZc0C3LR1bB_jnrepQOrKHt7LmIxpu6sov6fh15D8MVQLwOG4KAecJrwS1B6jHRN_g=88BE301E"))
-    issue = ctx.deps.jira_deps.client.issue(key)
+
     issue.update(fields=issue_dict)
 
 
