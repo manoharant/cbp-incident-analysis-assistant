@@ -35,6 +35,8 @@ class JiraDeps:
     client: JIRA
     project_key: str
     images = None
+    incident_id: str = None
+    defect_id: str = None
 
 @dataclass
 class MSTeamsDeps:
@@ -56,12 +58,8 @@ class MainDependencies:
 jira_system_prompt = """
     You are a atlassian jira expert with access to Jira to help the user manage the story,task and issue creation and get information from it.
     
-    Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + issue_key.
+    Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + incident_id.
     
-    Whenever you are creating jira issue call the below 2 functions only after creating the issue in sequence and not anything parallel.
-    - published message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'
-    - update the jira issue with comments by calling 'update_jira_issue_with_comments'
-
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
@@ -78,7 +76,8 @@ jira_system_prompt = """
 
 
 class JiraResponse(BaseModel):
-    issue_key: str
+    incident_id: str = None
+    defect_id: str = None
     summary: str = None
     description: str = None
     comments: list[str] = None
@@ -115,7 +114,7 @@ async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str
     jira_issues = []
     for issue in response:
         jira_issues.append(JiraResponse(
-            issue_key=issue.key,
+            incident_id=issue.key,
             summary=issue.fields.summary,
             description=issue.fields.description,
             comments=[comment.body for comment in issue.fields.comment.comments]
@@ -124,7 +123,7 @@ async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str
 
 
 @jira_agent.tool
-async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> list[JiraResponse]:
+async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> JiraResponse:
     """
     Search for Jira issue with the specified key and the response should contain the below format.
     - Issue key: Issue key with the hyperlink.
@@ -139,23 +138,23 @@ async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> list[Ji
     """
     logfire.info(f"Searching for Jira issue with key: {key}")
     response = ctx.deps.jira_deps.client.search_issues(f"project={ctx.deps.jira_deps.project_key} AND key={key}", maxResults=10)
-
+    ctx.deps.jira_deps.incident_id = key
     # Print the retrieved issues
     jira_issues = []
     for issue in response:
         jira_issues.append(JiraResponse(
-            issue_key=issue.key,
+            incident_id=issue.key,
             summary=issue.fields.summary,
             description=issue.fields.description,
             comments=[comment.body for comment in issue.fields.comment.comments]
         ))
-    return jira_issues
+    return jira_issues[0]
 
 
 @jira_agent.tool
-async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, description: str,issue_type:str,conversation_id:str,json:str) -> JiraResponse:
+async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, description: str,issue_type:str,conversation_id:str,json:str) -> JiraResponse:
     """
-    Create a new Jira issue.
+    Create a new Jira defect.
     :param ctx: RunContext object containing the dependencies.
     :param summary: Summary of the issue to be created.
     :param description: Description should contain the below list of points which should be highlighted with bold text and each point should be described with 3 to 5 bullet points.
@@ -211,29 +210,28 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
 
     # Extract the search results
     results = JiraResponse(
-        issue_key=response.key,
+        defect_id=response.key,
         description=response.fields.description
     )
 
     return results
 
 @jira_agent.tool
-async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],jira_issue_key:str, comments:str) -> None:
+async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],incident_id:str, comments:str) -> None:
     """
     This method should be triggered always, whenever the new issue defect is created or the user requests to update the comments after the analysis.
     This method updates the comments for the issue in Jira issue according to the comments provided.
     :param ctx: RunContext object containing the dependencies.
-    :param jira_issue_key: Key of the issue to be updated.
+    :param incident_id: Incident id of the issue created in Jira.
     :param comments: If there is a defect created , and we only quote the defect id in comments.
     Otherwise, we explain the issue in detail with 3-5 bullet points and update the comments with the analysis.
     :return:
     """
 
-    print(f"Updating Jira issue with key: {jira_issue_key}")
+    print(f"Updating Jira issue with key: {incident_id}")
     print(f"Updating Jira issue with comments: {comments}")
-    print(f"context: {ctx.deps.jira_deps}")
 
-    if jira_issue_key is None:
+    if incident_id is None:
         return
 
     # Create a new comment
@@ -241,16 +239,16 @@ async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],jira
     #                                 basic_auth=("manoharant@gmail.com",
     #                                             os.getenv("JIRA_PERSONAL_TOKEN")))
     #jira.add_comment("AIPOC-75", comments)
-    ctx.deps.jira_deps.client.add_comment(jira_issue_key, comments)
+    ctx.deps.jira_deps.client.add_comment(incident_id, comments)
 
 
 @jira_agent.tool
-async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_issue_key:str,devops_team:str,service_name:str) -> None:
+async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],incident_id:str,devops_team:str,service_name:str) -> None:
     """
     This method should be triggered, whenever the new issue defect is created or user requests to update the labels after the analysis.
     Everytime if the label is updated, the user should be notified with the message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'.
     :param ctx: RunContext object containing the dependencies.
-    :param jira_issue_key: Key of the issue to be updated.
+    :param incident_id: Incident id of the issue created in Jira.
     :param devops_team: Devops team label should be added as label in Jira.This value should match with one of the below enum values.
     - BOOKemon
     - QROOKS
@@ -260,16 +258,15 @@ async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_iss
     """
     labels = [devops_team,service_name]
     # response = ctx.deps.client.create_issue(fields=issue_dict)
-    print(f"Updating Jira issue with key: {jira_issue_key}")
+    print(f"Updating Jira issue with key: {ctx.deps.jira_deps.incident_id}")
     print(f"Updating Jira issue with labels: {labels}")
-    print(f"context: {ctx.deps.jira_deps}")
 
-    if jira_issue_key is None:
+    if incident_id is None:
         return
     #jira_issue_key = "AIPOC-75"
     #jira = JIRA(server='https://manoharant.atlassian.net',
     #                       basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
-    issue = ctx.deps.jira_deps.client.issue(jira_issue_key)
+    issue = ctx.deps.jira_deps.client.issue(incident_id)
     issue.update(fields={'labels': labels})
 
 
@@ -305,14 +302,14 @@ msteams_agent = Agent(
 
 
 @msteams_agent.tool
-async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],jira_issue_id:str,summary:str) -> str:
+async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],defect_id:str,summary:str) -> str:
     """
     Publish a message in the Microsoft Teams channel after creating or update of an issue in Jira.
     This message should contain the below details of the issue created in Jira.
     - Issue key : Issue key of the created issue with the hyperlink.
     - Summary: Summary of the issue created.
     :param ctx: RunContext object containing the dependencies.
-    :param jira_issue_id: this is the issue key of the issue created in Jira.
+    :param defect_id: this is the issue key of the issue created in Jira.
     :param summary: Summary of the issue created in Jira.
     :return: Message published in the Microsoft Teams channel.
     """
@@ -323,7 +320,7 @@ async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],jir
     myTeamsMessage.color("#F8C471")
 
     message = (f"Jira issue created or updated with the following details:\n\n"
-               f"- Issue key: [{jira_issue_id}](https://trackspace.lhsystems.com/browse/{jira_issue_id})\n"
+               f"- Issue key: [{defect_id}](https://trackspace.lhsystems.com/browse/{defect_id})\n"
                f"- Summary: {summary}\n")
 
     print(f"Teams Message: {message}")
@@ -391,7 +388,7 @@ async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversa
             }
         },
         "size": 500,
-        "_source": ["conversationid", "message", "payload"]
+        "_source": ["conversationid", "message", "payload","service_name"]
     }
 
     # Perform the search query on the specified index
