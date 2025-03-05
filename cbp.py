@@ -585,7 +585,11 @@ async def main(message: cl.Message):
                     path=uploaded_file.path,  # Use the path of the uploaded file
                     display="inline"  # Choose how to display it
                 )
-
+                # Send a message with the uploaded image
+                await cl.Message(
+                    content="Please wait while the details are being fetched for the uploaded image:",
+                    elements=[cl.Image(name="uploaded_image", path=uploaded_file.path)]
+                ).send()
                 # Read the file content
                 with open(uploaded_file.path, "rb") as f:  # Open the file in binary mode
                     image_data = f.read()
