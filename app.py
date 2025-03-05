@@ -58,7 +58,7 @@ jira_system_prompt = """
     
     Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + issue_key.
     
-    Whenever you are creating jira issue call the below 2 functions only after creating the issue in sequence.
+    Whenever you are creating jira issue call the below 2 functions only after creating the issue in sequence and not anything parallel.
     - published message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'
     - update the jira issue with comments by calling 'update_jira_issue_with_comments'
 
