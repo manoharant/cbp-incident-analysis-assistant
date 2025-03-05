@@ -57,6 +57,10 @@ jira_system_prompt = """
     You are a atlassian jira expert with access to Jira to help the user manage the story,task and issue creation and get information from it.
     
     Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + issue_key.
+    
+    Whenever you are creating jira issue call the below 2 functions only after creating the issue in sequence.
+    - published message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'
+    - update the jira issue with comments by calling 'update_jira_issue_with_comments'
 
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
@@ -151,9 +155,7 @@ async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> list[Ji
 @jira_agent.tool
 async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, description: str,issue_type:str,conversation_id:str,json:str) -> JiraResponse:
     """
-    Create a new Jira issue.After creating the issue call the below 2 functions,
-    - published message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'
-    - update the jira issue with comments by calling 'update_jira_issue_with_comments'
+    Create a new Jira issue.
     :param ctx: RunContext object containing the dependencies.
     :param summary: Summary of the issue to be created.
     :param description: Description should contain the below list of points which should be highlighted with bold text and each point should be described with 3 to 5 bullet points.
@@ -243,18 +245,20 @@ async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],jira
 
 
 @jira_agent.tool
-async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_issue_key:str,labels:str) -> None:
+async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_issue_key:str,devops_team:str,service_name:str) -> None:
     """
     This method should be triggered, whenever the new issue defect is created or user requests to update the labels after the analysis.
     Everytime if the label is updated, the user should be notified with the message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'.
     :param ctx: RunContext object containing the dependencies.
     :param jira_issue_key: Key of the issue to be updated.
-    :param labels: Labels to be updated for the issue.Labels should be separated by comma.This should match with one of the below enum values.
+    :param devops_team: Devops team label should be added as label in Jira.This value should match with one of the below enum values.
     - BOOKemon
     - QROOKS
     - EBOO
+    :param service_name: Service name should come from elastic search query and this will be added as a label in Jira.
     :return: JiraResponse object containing the issue key and description.
     """
+    labels = [devops_team,service_name]
     # response = ctx.deps.client.create_issue(fields=issue_dict)
     print(f"Updating Jira issue with key: {jira_issue_key}")
     print(f"Updating Jira issue with labels: {labels}")
@@ -266,7 +270,7 @@ async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_iss
     #jira = JIRA(server='https://manoharant.atlassian.net',
     #                       basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
     issue = ctx.deps.jira_deps.client.issue(jira_issue_key)
-    issue.update(fields={'labels': [labels]})
+    issue.update(fields={'labels': labels})
 
 
 ############## Teams Agent ##############
@@ -360,6 +364,7 @@ class Result:
     conversationid: str
     message: str
     payload: str
+    service_name: str
 
 main_agent = Agent(
     model,
@@ -399,7 +404,8 @@ async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversa
         result = Result(
             conversationid=source.get('conversationid', ''),
             message=source.get('message', ''),
-            payload=source.get('payload', '')
+            payload=source.get('payload', ''),
+            service_name=source.get('service_name', '')
         )
         results.append(result)
 
