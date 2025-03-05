@@ -237,7 +237,7 @@ async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],jira
     # Create a new comment
     #jira= JIRA(server='https://manoharant.atlassian.net',
     #                                 basic_auth=("manoharant@gmail.com",
-    #                                             "ATATT3xFfGF0xzpeDDXWq7roWglhJcHZ6XIB3THZSUxgfxZomH8iLBaYzmDIuGA_92kOxlVVlKIjtQjdc_RNR6zNxid9HAoy8UPxqWWguH3KJa6vHbPIrSmIABtQY57oKJlaWnF-DDlzMyrnOiElk8RL3U4zKAi5iwBXuPpJPA49ZObPbx7ooBY=C6607C1F"))
+    #                                             os.getenv("JIRA_PERSONAL_TOKEN")))
     #jira.add_comment("AIPOC-75", comments)
     ctx.deps.jira_deps.client.add_comment(jira_issue_key, comments)
 
@@ -264,7 +264,7 @@ async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],jira_iss
         return
     #jira_issue_key = "AIPOC-75"
     #jira = JIRA(server='https://manoharant.atlassian.net',
-    #                       basic_auth=("manoharant@gmail.com","ATATT3xFfGF0xzpeDDXWq7roWglhJcHZ6XIB3THZSUxgfxZomH8iLBaYzmDIuGA_92kOxlVVlKIjtQjdc_RNR6zNxid9HAoy8UPxqWWguH3KJa6vHbPIrSmIABtQY57oKJlaWnF-DDlzMyrnOiElk8RL3U4zKAi5iwBXuPpJPA49ZObPbx7ooBY=C6607C1F"))
+    #                       basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
     issue = ctx.deps.jira_deps.client.issue(jira_issue_key)
     issue.update(fields={'labels': [labels]})
 
