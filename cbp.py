@@ -19,7 +19,6 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry, RunContext, BinaryContent
 from pydantic_ai.models.openai import OpenAIModel
 from dotenv import load_dotenv
-from pydeck import settings
 import pymsteams
 
 load_dotenv()
@@ -40,6 +39,8 @@ class JiraDeps:
     client: JIRA
     project_key: str
     images = None
+    incident_id: str = None
+    defect_id: str = None
 
 @dataclass
 class MSTeamsDeps:
@@ -58,10 +59,10 @@ class MainDependencies:
 
 ############## Jira Agent ##############
 
-system_prompt = """
+jira_system_prompt = """
     You are a atlassian jira expert with access to Jira to help the user manage the story,task and issue creation and get information from it.
 
-    Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + issue_key.
+    Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + incident_id.
 
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
@@ -79,7 +80,8 @@ system_prompt = """
 
 
 class JiraResponse(BaseModel):
-    issue_key: str
+    incident_id: str = None
+    defect_id: str = None
     summary: str = None
     description: str = None
     comments: list[str] = None
@@ -88,7 +90,7 @@ class JiraResponse(BaseModel):
 
 jira_agent = Agent(
     model,
-    system_prompt=system_prompt,
+    system_prompt=jira_system_prompt,
     deps_type=JiraDeps,
     retries=0
 )
@@ -116,7 +118,7 @@ async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str
     jira_issues = []
     for issue in response:
         jira_issues.append(JiraResponse(
-            issue_key=issue.key,
+            incident_id=issue.key,
             summary=issue.fields.summary,
             description=issue.fields.description,
             comments=[comment.body for comment in issue.fields.comment.comments]
@@ -125,7 +127,7 @@ async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str
 
 
 @jira_agent.tool
-async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> list[JiraResponse]:
+async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> JiraResponse:
     """
     Search for Jira issue with the specified key and the response should contain the below format.
     - Issue key: Issue key with the hyperlink.
@@ -140,26 +142,26 @@ async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> list[Ji
     """
     logfire.info(f"Searching for Jira issue with key: {key}")
     response = ctx.deps.jira_deps.client.search_issues(f"project={ctx.deps.jira_deps.project_key} AND key={key}", maxResults=10)
-
+    ctx.deps.jira_deps.incident_id = key
     # Print the retrieved issues
     jira_issues = []
     for issue in response:
         jira_issues.append(JiraResponse(
-            issue_key=issue.key,
+            incident_id=issue.key,
             summary=issue.fields.summary,
             description=issue.fields.description,
             comments=[comment.body for comment in issue.fields.comment.comments]
         ))
-    return jira_issues
+    return jira_issues[0]
 
 
 @jira_agent.tool
-async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, description: str,issue_type:str,conversation_id:str,json:str) -> JiraResponse:
+async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, description: str,issue_type:str,conversation_id:str,json:str) -> JiraResponse:
     """
-    Create a new Jira issue.
+    Create a new Jira defect.
     :param ctx: RunContext object containing the dependencies.
     :param summary: Summary of the issue to be created.
-    :param description: Description should contain the below list of points and each point should be described with 3 to 5 bullet points.
+    :param description: Description should contain the below list of points which should be highlighted with bold text and each point should be described with 3 to 5 bullet points.
     Each point should follow the Jira format , and the description should follow the jira style with proper format.
      * Issue description: Issue details with some important points.
      * Error observed: Error details.
@@ -174,10 +176,16 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
 
     image_name = os.path.basename(ctx.deps.jira_deps.images[0].path) if ctx.deps.jira_deps.images else None
 
+    sherlog_host=os.getenv("SHERLOG_HOST")
+
+    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:e7f67bce-8dab-44a2-901c-2eb65e595ea5,type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
+    issue_url = issue_url.replace(")","%29")
+
     issue_description = f"""
     
     {description}
     * conversationId: {conversation_id}
+    * Sherlog url: {issue_url}
 
     {{code}}
     {json}
@@ -198,7 +206,7 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
     # Perform the search query on the specified index
     # response = ctx.deps.client.create_issue(fields=issue_dict)
     ctx.deps.jira_deps.client = JIRA(server='https://manoharant.atlassian.net',
-                                     basic_auth=("manoharant@gmail.com","ATATT3xFfGF0rAfbxoDY9QMUKuvXZLEwzSxGC3rbwTH1nsuCXDlL7tSKQ5FT2Kq59yg4Q2AWzcTFtrHHEihY0yxX7fM9IFaDbDW0_n7VqMda59kXNVE5-aiAw27C1NY3h0W6fMA-e8JenDXh85rO4CA7BoOkzKDriGPHop9feUeeoAGXmJ3Z6_A=2E0BB3E5"))
+                                     basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
     response = ctx.deps.jira_deps.client.create_issue(fields=issue_dict)
 
     if ctx.deps.jira_deps.images:
@@ -206,40 +214,69 @@ async def create_jira_issue(ctx: RunContext[MainDependencies], summary: str, des
 
     # Extract the search results
     results = JiraResponse(
-        issue_key=response.key,
+        defect_id=response.key,
         description=response.fields.description
     )
 
     return results
 
+@jira_agent.tool
+async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],incident_id:str, comments:str) -> None:
+    """
+    This method should be triggered always, whenever the new issue defect is created or the user requests to update the comments after the analysis.
+    This method updates the comments for the issue in Jira issue according to the comments provided.
+    :param ctx: RunContext object containing the dependencies.
+    :param incident_id: Incident id of the issue created in Jira.
+    :param comments: If there is a defect created , and we only quote the defect id in comments.
+    Otherwise, we explain the issue in detail with 3-5 bullet points and update the comments with the analysis.
+    :return:
+    """
+
+    print(f"Updating Jira issue with key: {incident_id}")
+    print(f"Updating Jira issue with comments: {comments}")
+
+    if incident_id is None:
+        return
+
+    # Create a new comment
+    #jira= JIRA(server='https://manoharant.atlassian.net',
+    #                                 basic_auth=("manoharant@gmail.com",
+    #                                             os.getenv("JIRA_PERSONAL_TOKEN")))
+    #jira.add_comment("AIPOC-75", comments)
+    ctx.deps.jira_deps.client.add_comment(incident_id, comments)
+
 
 @jira_agent.tool
-async def update_jira_issue(ctx: RunContext[MainDependencies],key:str, summary: str, description: str) -> None:
+async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],incident_id:str,devops_team:str,service_name:str) -> None:
     """
-    Create a new Jira issue.
+    This method should be triggered, whenever the new issue defect is created or user requests to update the labels after the analysis.
+    Everytime if the label is updated, the user should be notified with the message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'.
     :param ctx: RunContext object containing the dependencies.
-    :param key: Key of the issue to be updated.
-    :param summary: Summary of the issue to be created.
-    :param description: Description of the issue to be created. if the description contains json data,then format it properly.
+    :param incident_id: Incident id of the issue created in Jira.
+    :param devops_team: Devops team label should be added as label in Jira.This value should match with one of the below enum values.
+    - BOOKemon
+    - QROOKS
+    - EBOO
+    :param service_name: Service name should come from elastic search query and this will be added as a label in Jira.
     :return: JiraResponse object containing the issue key and description.
     """
-    # Define the search query
-    issue_dict = {
-        'summary': summary,
-        'description': description,
-    }
-
-    # Perform the search query on the specified index
+    labels = [devops_team,service_name]
     # response = ctx.deps.client.create_issue(fields=issue_dict)
-    ctx.deps.client = JIRA(server='https://manoharant.atlassian.net',
-                           basic_auth=("manoharant@gmail.com","ATATT3xFfGF0z2tETfqzBNomWPdxMACIXRMlkMd4RjEKUtOdeypHun-ch4m28CgucDI5LJrdX3jpJg66nRpXx10lG8PCNYgQVM4kU63po59ZoRFsfVgazqZc0C3LR1bB_jnrepQOrKHt7LmIxpu6sov6fh15D8MVQLwOG4KAecJrwS1B6jHRN_g=88BE301E"))
-    issue = ctx.deps.jira_deps.client.issue(key)
-    issue.update(fields=issue_dict)
+    print(f"Updating Jira issue with key: {ctx.deps.jira_deps.incident_id}")
+    print(f"Updating Jira issue with labels: {labels}")
+
+    if incident_id is None:
+        return
+    #jira_issue_key = "AIPOC-75"
+    #jira = JIRA(server='https://manoharant.atlassian.net',
+    #                       basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
+    issue = ctx.deps.jira_deps.client.issue(incident_id)
+    issue.update(fields={'labels': labels})
 
 
 ############## Teams Agent ##############
 
-system_prompt = """
+ms_teams_system_prompt = """
     You are a microsoft teams expert with access to microsoft Teams to help the user to publish the message in teams channels.
 
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
@@ -259,24 +296,25 @@ system_prompt = """
 
 
 
+
 msteams_agent = Agent(
     model,
-    system_prompt=system_prompt,
+    system_prompt=ms_teams_system_prompt,
     deps_type=MSTeamsDeps,
     retries=0
 )
 
 
 @msteams_agent.tool
-async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],issue_key:str,summary:str) -> str:
+async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],defect_id:str,summary:str) -> str:
     """
-    Publish a message in the Microsoft Teams channel.
+    Publish a message in the Microsoft Teams channel after creating or update of an issue in Jira.
     This message should contain the below details of the issue created in Jira.
     - Issue key : Issue key of the created issue with the hyperlink.
     - Summary: Summary of the issue created.
     :param ctx: RunContext object containing the dependencies.
-    :param issue_key: Issue key of the created issue.It should be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + issue_key.
-    :param summary: Summary of the issue created.
+    :param defect_id: this is the issue key of the issue created in Jira.
+    :param summary: Summary of the issue created in Jira.
     :return: Message published in the Microsoft Teams channel.
     """
     # Initialize the connector card with your webhook URL
@@ -285,8 +323,8 @@ async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],iss
     # Set the message color
     myTeamsMessage.color("#F8C471")
 
-    message = (f"New Jira issue created with the following details:\n\n"
-               f"- Issue key: [{issue_key}](https://trackspace.lhsystems.com/browse/{issue_key})\n"
+    message = (f"Jira issue created or updated with the following details:\n\n"
+               f"- Issue key: [{defect_id}](https://trackspace.lhsystems.com/browse/{defect_id})\n"
                f"- Summary: {summary}\n")
 
     print(f"Teams Message: {message}")
@@ -300,11 +338,13 @@ async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],iss
 
 #################### Main Agent ####################
 
-system_prompt = """
+elastic_system_prompt = """
     You are a Elastic agent and you are an elastic expert with access to Elasticsearch to help the user manage the log index and get information from it.
 
     You also manage 2 sub agents, Jira agent to help the user manage the story,task and issue creation and get information from it. Microsoft Teams agent to post messages whenever Jira agent creates any item in Jira.
-
+    
+    While delegating to the agents, also handover the context to the agents so that they can use the context to perform the actions.
+    
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
@@ -327,35 +367,14 @@ class Result:
     conversationid: str
     message: str
     payload: str
-
-
-
+    service_name: str
 
 main_agent = Agent(
     model,
-    system_prompt=system_prompt,
+    system_prompt=elastic_system_prompt,
     deps_type=ElasticDeps,
     retries=0
 )
-
-
-@main_agent.tool
-async def delegate_to_jira_agent(ctx: RunContext[MainDependencies], details: str) -> str:
-    print(f"Delegating to jira agent with details: {details}")
-    result = await jira_agent.run(f"Can you solve {details}", deps=ctx.deps)
-    return result.data
-
-@main_agent.tool
-async def delegate_to_ms_teams_agent(ctx: RunContext[MainDependencies], details: str) -> str:
-    print(f"Delegating to jira agent with details: {details}")
-    result = await msteams_agent.run(f"Can you publish {details}", deps=ctx.deps)
-    return result.data
-
-@jira_agent.tool
-async def delegate_to_elastic_agent(ctx: RunContext[MainDependencies], details: str) -> str:
-    print(f"Delegating to Elastic agent with details: {details}")
-    result = await main_agent.run(f"Can you solve {details}", deps=ctx.deps)
-    return result.data
 
 @main_agent.tool
 async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversationid: str) -> ObjectApiResponse[Any]:
@@ -375,7 +394,7 @@ async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversa
             }
         },
         "size": 500,
-        "_source": ["conversationid", "message", "payload"]
+        "_source": ["conversationid", "message", "payload","service_name"]
     }
 
     # Perform the search query on the specified index
@@ -388,16 +407,41 @@ async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversa
         result = Result(
             conversationid=source.get('conversationid', ''),
             message=source.get('message', ''),
-            payload=source.get('payload', '')
+            payload=source.get('payload', ''),
+            service_name=source.get('service_name', '')
         )
         results.append(result)
 
     return results
 
+######### Delegating to other agents #########
+
+@main_agent.tool
+async def delegate_to_jira_agent(ctx: RunContext[MainDependencies], details: str) -> str:
+    print(f"Delegating to jira agent with details: {details}")
+    result = await jira_agent.run(f"Can you solve {details}", deps=ctx.deps)
+    return result.data
+
+@main_agent.tool
+async def delegate_to_ms_teams_agent(ctx: RunContext[MainDependencies], details: str) -> str:
+    print(f"Delegating to jira agent with details: {details}")
+    result = await msteams_agent.run(f"Can you publish {details}", deps=ctx.deps)
+    return result.data
+
+@jira_agent.tool
+async def delegate_to_elastic_agent(ctx: RunContext[MainDependencies], details: str) -> str:
+    print(f"Delegating to Elastic agent with details: {details}")
+    result = await main_agent.run(f"Can you solve {details}", deps=ctx.deps)
+    return result.data
+
+@jira_agent.tool
+async def delegate_to_ms_teams_agent(ctx: RunContext[MainDependencies], details: str) -> str:
+    print(f"Delegating to jira agent with details: {details}")
+    result = await msteams_agent.run(f"Can you publish {details}", deps=ctx.deps)
+    return result.data
 
 #################### Chat with agents ####################
 
-# message_history = []
 elastic_host = os.getenv('ELASTICSEARCH_HOST')
 elastic_port = os.getenv('ELASTICSEARCH_PORT')
 elastic_index = os.getenv('ELASTICSEARCH_INDEX')
