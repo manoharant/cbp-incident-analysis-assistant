@@ -338,7 +338,9 @@ elastic_system_prompt = """
     You are a Elastic agent and you are an elastic expert with access to Elasticsearch to help the user manage the log index and get information from it.
 
     You also manage 2 sub agents, Jira agent to help the user manage the story,task and issue creation and get information from it. Microsoft Teams agent to post messages whenever Jira agent creates any item in Jira.
-
+    
+    While delegating to the agents, also handover the context to the agents so that they can use the context to perform the actions.
+    
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
@@ -463,6 +465,7 @@ main_dependencies = MainDependencies(
 
 @cl.on_chat_start
 async def start():
+    print("start called")
     cl.user_session.memory = []
     cl.user_session.settings = None
     main_dependencies.jira_deps.images = None
