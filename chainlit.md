@@ -7,7 +7,7 @@ Follow the below steps to setup the project.
 
 ## Environment Setup
 
-- Create a `.env` file in the root directory
+- Create a `.env` file in the root directory using the `.env.example` file
 - Add the following environment variables
   - `AZURE_OPENAI_ENDPOINT` - Azure endpoint
   - `AZURE_OPENAI_API_KEY` - Azure subscription key
@@ -21,6 +21,8 @@ Follow the below steps to setup the project.
 - Jira credentials
   - `JIRA_URL` - Jira url
   - `JIRA_TOKEN` - Jira password
+- Teams credentials
+  - `TEAMS_WEBHOOK_URL` - Teams webhook url
 
 ## Prerequisites
 - Python 3.10 or above
@@ -36,3 +38,4 @@ Follow the below steps to setup the project.
     - this has 2 AI agents for interacting with Jira and Elastic
         - `JiraAgent` - to fetch the data from Jira
         - `ElasticAgent` - to fetch the data from Elastic
+        - `TeamsAgent` - to send the data to Teams
