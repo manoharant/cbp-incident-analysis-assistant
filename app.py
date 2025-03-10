@@ -57,10 +57,10 @@ class MainDependencies:
 
 jira_system_prompt = """
     You are a atlassian jira expert with access to Jira to help the user manage the story,task and issue creation and get information from it.
-    
-    Wherever we response the jira item and it can be can be shown with hyperlink for easy navigation,base_url(https://trackspace.lhsystems.com/browse/) + incident_id.
-    
+        
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
+    
+    While delegating to the other agents(elastic or teams agents), also handover the context to the agents so that they can use the context to perform the actions.
 
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
     
@@ -94,7 +94,7 @@ jira_agent = Agent(
 @jira_agent.tool
 async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str) -> list[JiraResponse]:
     """
-    Search for Jira issues with the specified keyword and summarize each issue with max 10 sentence description.
+    Search for Jira issues with the specified keyword and summarize each issue with max 5 sentence summary.Search key should be 1 or 2 words from the subject of the issue.
     Every issue should contain the issue key with hyperlink and description.
     :param ctx: RunContext object containing the dependencies.
     :param search_keyword:  Keyword to search for in the Jira issues.
@@ -174,7 +174,7 @@ async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, de
 
     sherlog_host=os.getenv("SHERLOG_HOST")
 
-    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:e7f67bce-8dab-44a2-901c-2eb65e595ea5,type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
+    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:'0b2ef3fd-f8ad-4cd8-9415-e5ab87b5ec8b',type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
     issue_url = issue_url.replace(")","%29")
 
     issue_description = f"""
@@ -219,7 +219,6 @@ async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, de
 @jira_agent.tool
 async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],incident_id:str, comments:str) -> None:
     """
-    This method should be triggered always, whenever the new issue defect is created or the user requests to update the comments after the analysis.
     This method updates the comments for the issue in Jira issue according to the comments provided.
     :param ctx: RunContext object containing the dependencies.
     :param incident_id: Incident id of the issue created in Jira.
@@ -242,41 +241,13 @@ async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],inci
     ctx.deps.jira_deps.client.add_comment(incident_id, comments)
 
 
-@jira_agent.tool
-async def update_jira_label_for_issue(ctx: RunContext[MainDependencies],incident_id:str,devops_team:str,service_name:str) -> None:
-    """
-    This method should be triggered, whenever the new issue defect is created or user requests to update the labels after the analysis.
-    Everytime if the label is updated, the user should be notified with the message in the Microsoft Teams channel by calling 'publish_message_in_teams_channel'.
-    :param ctx: RunContext object containing the dependencies.
-    :param incident_id: Incident id of the issue created in Jira.
-    :param devops_team: Devops team label should be added as label in Jira.This value should match with one of the below enum values.
-    - BOOKemon
-    - QROOKS
-    - EBOO
-    :param service_name: Service name should come from elastic search query and this will be added as a label in Jira.
-    :return: JiraResponse object containing the issue key and description.
-    """
-    labels = [devops_team,service_name]
-    # response = ctx.deps.client.create_issue(fields=issue_dict)
-    print(f"Updating Jira issue with key: {ctx.deps.jira_deps.incident_id}")
-    print(f"Updating Jira issue with labels: {labels}")
-
-    if incident_id is None:
-        return
-    #jira_issue_key = "AIPOC-75"
-    #jira = JIRA(server='https://manoharant.atlassian.net',
-    #                       basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
-    issue = ctx.deps.jira_deps.client.issue(incident_id)
-    issue.update(fields={'labels': labels})
-
-
 ############## Teams Agent ##############
 
 ms_teams_system_prompt = """
     You are a microsoft teams expert with access to microsoft Teams to help the user to publish the message in teams channels.
 
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
-
+    
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
 
     When answering a question about the query, always start your answer with the full details in brackets and then give your answer on a newline. Like:
@@ -336,11 +307,7 @@ async def publish_message_in_teams_channel(ctx: RunContext[MainDependencies],def
 
 elastic_system_prompt = """
     You are a Elastic agent and you are an elastic expert with access to Elasticsearch to help the user manage the log index and get information from it.
-
-    You also manage 2 sub agents, Jira agent to help the user manage the story,task and issue creation and get information from it. Microsoft Teams agent to post messages whenever Jira agent creates any item in Jira.
-    
-    While delegating to the agents, also handover the context to the agents so that they can use the context to perform the actions.
-    
+        
     Your only job is to assist with this and you don't answer other questions besides describing what you are able to do.
 
     Don't ask the user before taking an action, just do it. Always make sure you look at the index with the provided tools before answering the user's question unless you have already.
@@ -365,18 +332,24 @@ class Result:
     payload: str
     service_name: str
 
-main_agent = Agent(
+elastic_agent = Agent(
     model,
     system_prompt=elastic_system_prompt,
     deps_type=ElasticDeps,
     retries=0
 )
 
-@main_agent.tool
+@elastic_agent.tool
 async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversationid: str) -> ObjectApiResponse[Any]:
     """
-    Get the result of an Elasticsearch query by conversation ID.
-
+    Get the result of an Elasticsearch query by conversation ID and summarize each result with the below format and each section heading should be highlighted and each section should have 5-10 bullet points.
+     * Conversation ID: Conversation ID of the logs.
+     * Summary: Summary of the logs with the conversation ID and maximum 10 sentences.Don't include technical details in the summary.
+     * Error observed: Describe if you find any error in the logs.
+     * Technical details: Possible technical details observed from the logs.
+     * External system involved: External system involved in the issue. Highlight the external system has an issue or error from the logs.
+    Whenever the user asks for the json data,provide the correct json data extracted from the logs and do not modify the json data.
+    If no results logs for the requested conversation ID, return the message "No logs found for the conversation ID"
     :param ctx: agent context
     :param conversationid: conversation ID to extract the result
     :return: ESResponse containing the search results
@@ -412,13 +385,14 @@ async def get_result_conversation_id(ctx: RunContext[MainDependencies], conversa
 
 ######### Delegating to other agents #########
 
-@main_agent.tool
+@elastic_agent.tool
 async def delegate_to_jira_agent(ctx: RunContext[MainDependencies], details: str) -> str:
     print(f"Delegating to jira agent with details: {details}")
+    cl.user_session.settings = "Search for Jira incidents"
     result = await jira_agent.run(f"Can you solve {details}", deps=ctx.deps)
     return result.data
 
-@main_agent.tool
+@elastic_agent.tool
 async def delegate_to_ms_teams_agent(ctx: RunContext[MainDependencies], details: str) -> str:
     print(f"Delegating to jira agent with details: {details}")
     result = await msteams_agent.run(f"Can you publish {details}", deps=ctx.deps)
@@ -427,7 +401,7 @@ async def delegate_to_ms_teams_agent(ctx: RunContext[MainDependencies], details:
 @jira_agent.tool
 async def delegate_to_elastic_agent(ctx: RunContext[MainDependencies], details: str) -> str:
     print(f"Delegating to Elastic agent with details: {details}")
-    result = await main_agent.run(f"Can you solve {details}", deps=ctx.deps)
+    result = await elastic_agent.run(f"Can you solve {details}", deps=ctx.deps)
     return result.data
 
 @jira_agent.tool
@@ -491,33 +465,60 @@ async def setup_agent(settings):
 async def main(message: cl.Message):
     # Your custom logic goes here...
     # Send a response back to the user
-    print(f"Selected option: {cl.user_session.settings["selected_option"]}")
-    if cl.user_session.settings["selected_option"] == "Search for logs":
-        # Processing images exclusively
-        images = [file for file in message.elements if "image" in file.mime]
-        if images:
-            main_dependencies.jira_deps.images = images
-            with open(images[0].path, 'rb') as file:
-                image_data = file.read()
-            response = await main_agent.run(
-                [
-                    'Summarize the details from the image. If you find any error or conversation id, then search with elastic and summarize with the detailed information.',
-                    BinaryContent(data=image_data, media_type='image/jpeg'),
-                ], message_history=cl.user_session.memory, deps=main_dependencies
-            )
-        else:
-            response = await main_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
+    # Display a "loading" spinner
+    spinner = "⏳ Processing..."
+    #Send the initial loading message
+    loading_message = cl.Message(content=spinner)
+    await loading_message.send()
+    #print(f"Selected option: {cl.user_session.settings["selected_option"]}")
+    try:
+        if cl.user_session.settings.get("selected_option") == "Search for logs":
+            # Processing images exclusively
+            images = [file for file in message.elements if "image" in file.mime]
+            if images:
+                main_dependencies.jira_deps.images = images
+                with open(images[0].path, 'rb') as file:
+                    image_data = file.read()
+                response = await elastic_agent.run(
+                    [
+                        'Summarize the details from the image. If you find any error or conversation id, then search with elastic and summarize with the detailed information.',
+                        BinaryContent(data=image_data, media_type='image/jpeg'),
+                    ], message_history=cl.user_session.memory, deps=main_dependencies
+                )
+            else:
+                response = await elastic_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
+            cl.user_session.memory = response.all_messages()
+            loading_message.content = "✅ Processed successfully"
+            await loading_message.update()
+            await cl.Message(content=response.data).send()
+        elif cl.user_session.settings.get("selected_option") == "Search for Jira incidents":
+            main_dependencies.jira_deps = JiraDeps(client=JIRA(server=jira_url, token_auth=api_token),
+                                 project_key=os.getenv('JIRA_INCIDENT_PROJECT_KEY'))
+            response = await jira_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
+            cl.user_session.memory = response.all_messages()
+            loading_message.content = "✅ Processed successfully"
+            await loading_message.update()
+            await cl.Message(content=response.data).send()
+        elif cl.user_session.settings.get("selected_option") == "Search for Jira stories":
+            main_dependencies.jira_deps = JiraDeps(client=JIRA(server=jira_url, token_auth=api_token),
+                                 project_key=os.getenv('JIRA_PROJECT_KEY'))
+            response = await jira_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
+            cl.user_session.memory = response.all_messages()
+            loading_message.content = "✅ Processed successfully"
+            await loading_message.update()
+            await cl.Message(content=response.data).send()
+        else :
+            response = await elastic_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
+            cl.user_session.memory = response.all_messages()
+            loading_message.content = "✅ Processed successfully"
+            await loading_message.update()
+            await cl.Message(content=response.data).send()
+    except Exception as e:
+        print("Exception occured",e)
+        response = await elastic_agent.run(message.content, message_history=cl.user_session.memory,
+                                           deps=main_dependencies)
         cl.user_session.memory = response.all_messages()
+        loading_message.content = "✅ Processed successfully"
+        await loading_message.update()
         await cl.Message(content=response.data).send()
-    elif cl.user_session.settings["selected_option"] == "Search for Jira incidents":
-        main_dependencies.jira_deps = JiraDeps(client=JIRA(server=jira_url, token_auth=api_token),
-                             project_key=os.getenv('JIRA_INCIDENT_PROJECT_KEY'))
-        response = await jira_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
-        cl.user_session.memory = response.all_messages()
-        await cl.Message(content=response.data).send()
-    elif cl.user_session.settings["selected_option"] == "Search for Jira stories":
-        main_dependencies.jira_deps = JiraDeps(client=JIRA(server=jira_url, token_auth=api_token),
-                             project_key=os.getenv('JIRA_PROJECT_KEY'))
-        response = await jira_agent.run(message.content, message_history=cl.user_session.memory, deps=main_dependencies)
-        cl.user_session.memory = response.all_messages()
-        await cl.Message(content=response.data).send()
+

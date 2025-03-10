@@ -54,7 +54,7 @@ edit_message = true
 [UI]
 
 # Name of the assistant.
-name = "Incident Analysis Assistant (DIAA)"
+name = "Incident Analysis Assistant"
 
 default_theme = "light"
 
