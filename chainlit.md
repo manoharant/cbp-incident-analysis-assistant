@@ -23,7 +23,6 @@ Follow the below steps to setup the project.
   - `JIRA_API_TOKEN` - Jira API token
   - `JIRA_PROJECT_KEY` - Jira project key(e.g. `NEWBE`)
   - `JIRA_INCIDENT_PROJECT_KEY` - Jira incident project key(e.g. `LCAGIM`)
-  - `JIRA_PERSONAL_TOKEN` - Jira personal token
 - Local Jira settings
   - `LOCAL_JIRA_URL` - Jira url (e.g. `http://localhost:8080`)
   - `LOCAL_JIRA_API_TOKEN` - Jira API token
