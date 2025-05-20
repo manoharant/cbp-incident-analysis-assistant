@@ -126,7 +126,7 @@ async def get_jira_issues(ctx: RunContext[MainDependencies], search_keyword: str
 async def get_jira_issue(ctx: RunContext[MainDependencies], key: str) -> JiraResponse:
     """
     Search for Jira issue with the specified key and the response should contain the below format.
-    - Issue key: Issue key with the hyperlink.
+    - Issue key: Issue key with the hyperlink.example [AIPOC-75](https://trackspace.lhsystems.com/browse/AIPOC-75)
     - Summary: Summary of the issue with maximum 10 sentence.
     - Description: Detailed description including key points.
     - External system involved: External system involved in the issue.
@@ -174,7 +174,7 @@ async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, de
 
     sherlog_host=os.getenv("SHERLOG_HOST")
 
-    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:'0b2ef3fd-f8ad-4cd8-9415-e5ab87b5ec8b',type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
+    issue_url = f"{sherlog_host}/app/discover#/?_g=(filters:!(),refreshInterval:(pause:!t,value:60000),time:(from:now-15d,to:now))&_a=(columns:!(message,payload),dataSource:(dataViewId:'0fd4426f-5799-488f-943c-d8e61cad9a53',type:dataView),filters:!(),interval:auto,query:(language:kuery,query:%22{conversation_id}%22),sort:!(!('@timestamp',desc)))"
     issue_url = issue_url.replace(")","%29")
 
     issue_description = f"""
@@ -201,8 +201,7 @@ async def create_jira_defect(ctx: RunContext[MainDependencies], summary: str, de
 
     # Perform the search query on the specified index
     # response = ctx.deps.client.create_issue(fields=issue_dict)
-    ctx.deps.jira_deps.client = JIRA(server='https://manoharant.atlassian.net',
-                           basic_auth=("manoharant@gmail.com",os.getenv("JIRA_PERSONAL_TOKEN")))
+    ctx.deps.jira_deps.client = JIRA(server=os.getenv("LOCAL_JIRA_URL"),token_auth=os.getenv("LOCAL_JIRA_API_TOKEN"))
     response = ctx.deps.jira_deps.client.create_issue(fields=issue_dict)
 
     if ctx.deps.jira_deps.images:
@@ -232,12 +231,6 @@ async def update_jira_issue_with_comments(ctx: RunContext[MainDependencies],inci
 
     if incident_id is None:
         return
-
-    # Create a new comment
-    #jira= JIRA(server='https://manoharant.atlassian.net',
-    #                                 basic_auth=("manoharant@gmail.com",
-    #                                             os.getenv("JIRA_PERSONAL_TOKEN")))
-    #jira.add_comment("AIPOC-75", comments)
     ctx.deps.jira_deps.client.add_comment(incident_id, comments)
 
 

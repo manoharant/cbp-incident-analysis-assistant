@@ -1,4 +1,4 @@
-# Welcome to CBP Incident Analysis Assistant! 🚀🤖
+# Welcome to DIAA - Digital Incident Analysis Assistant! 🚀🤖
 
 Hi there, 👋 We're excited to have you on board. Incident Analysis tool designed to help you to analyze incidents and create issues.
 
@@ -20,9 +20,20 @@ Follow the below steps to setup the project.
   - `ELASTICSEARCH_SCHEME` - Elastic scheme
 - Jira credentials
   - `JIRA_URL` - Jira url
-  - `JIRA_TOKEN` - Jira password
+  - `JIRA_API_TOKEN` - Jira API token
+  - `JIRA_PROJECT_KEY` - Jira project key(e.g. `NEWBE`)
+  - `JIRA_INCIDENT_PROJECT_KEY` - Jira incident project key(e.g. `LCAGIM`)
+  - `JIRA_PERSONAL_TOKEN` - Jira personal token
+- Local Jira settings
+  - `LOCAL_JIRA_URL` - Jira url (e.g. `http://localhost:8080`)
+  - `LOCAL_JIRA_API_TOKEN` - Jira API token
+  - `LOCAL_JIRA_PROJECT_KEY` - Jira project key(e.g. `AIPOC`)
+
 - Teams credentials
-  - `TEAMS_WEBHOOK_URL` - Teams webhook url
+  - `MICROSOFT_TEAMS_WEBHOOK_URL` - Teams webhook url
+
+- LOGFIRE settings
+  - `LOGFIRE_CONSOLE` - Logfire console disable(default: `false`)
 
 ## Prerequisites
 - Python 3.10 or above
@@ -30,12 +41,12 @@ Follow the below steps to setup the project.
 - install the required packages
   - `pip install -r requirements.txt`
 - run the project
-  - `streamlit run app.py`
+  - `chainlit run app.py`
 
 ## Project Structure
 
 - `app.py` - Streamlit app
-    - this has 2 AI agents for interacting with Jira and Elastic
+    - this has 3 AI agents for interacting with Jira and Elastic
         - `JiraAgent` - to fetch the data from Jira
         - `ElasticAgent` - to fetch the data from Elastic
         - `TeamsAgent` - to send the data to Teams
