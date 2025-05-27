@@ -16,6 +16,7 @@ from pydantic_ai import Agent, RunContext, BinaryContent
 from pydantic_ai.models.openai import OpenAIModel
 from dotenv import load_dotenv
 import pymsteams
+from pydantic_ai.providers.openai import OpenAIProvider
 
 load_dotenv()
 logfire.configure()
@@ -26,7 +27,7 @@ client = AsyncAzureOpenAI(
     api_version=os.getenv('AZURE_OPENAI_API_VERSION'),
     api_key=os.getenv('AZURE_OPENAI_API_KEY'),
 )
-model = OpenAIModel(os.getenv('AZURE_OPENAI_MODEL_NAME'), openai_client=client)
+model = OpenAIModel(os.getenv('AZURE_OPENAI_MODEL_NAME'), provider=OpenAIProvider(openai_client=client))
 
 
 ############## Dependency initialization ##############
