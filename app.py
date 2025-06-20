@@ -433,7 +433,6 @@ main_dependencies = MainDependencies(
 
 @cl.on_chat_start
 async def start():
-    print("start called")
     cl.user_session.memory = []
     cl.user_session.settings = None
     main_dependencies.jira_deps.images = None
